@@ -27,7 +27,7 @@ class AirSimDroneEnv(AirSimEnv):
         self._setup_flight()
 
         self.image_request = airsim.ImageRequest(
-            3, airsim.ImageType.Scene, True, False
+            3, airsim.ImageType.Scene, False, False
         )
 
     def __del__(self):
@@ -37,26 +37,29 @@ class AirSimDroneEnv(AirSimEnv):
         self.drone.reset()
         self.drone.enableApiControl(True)
         self.drone.armDisarm(True)
+        self.drone.takeoffAsync().join()
 
         # Set home position and velocity
         self.drone.moveToPositionAsync(-0.55265, -31.9786, -19.0225, 10).join()
         self.drone.moveByVelocityAsync(1, -0.67, -0.8, 5).join()
 
     def transform_obs(self, responses):
-        img1d = np.array(responses[0].image_data_float, dtype=np.float)
-        img1d = 255 / np.maximum(np.ones(img1d.size), img1d)
-        img2d = np.reshape(img1d, (responses[0].height, responses[0].width, 3))
+        img1d_rgb = np.frombuffer(responses[0].image_data_uint8, dtype=np.uint8)
+        img3d_rgb = img1d_rgb.reshape(responses[0].height, responses[0].width, 3)
+
+        print(img3d_rgb[0][0][0].dtype)
 
         from PIL import Image
 
-        image = Image.fromarray(img2d)
+        image = Image.fromarray(img3d_rgb)
         im_final = np.array(image.resize((84, 84)).convert("L"))
 
-        return im_final.reshape([84, 84, 3])
+        return im_final.reshape([84, 84, 1])
 
     def _get_obs(self):
         responses = self.drone.simGetImages([self.image_request])
         image = self.transform_obs(responses)
+        print(image.shape)
         self.drone_state = self.drone.getMultirotorState()
 
         self.state["prev_position"] = self.state["position"]
